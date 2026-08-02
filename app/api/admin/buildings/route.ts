@@ -12,6 +12,7 @@ export async function POST(request: Request) {
     caretakerName?: string
     phone?: string
     email?: string
+    tempPassword?: string
   }
 
   try {
@@ -20,11 +21,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { buildingName, area, town, caretakerName, phone, email } = body
+  const { buildingName, area, town, caretakerName, phone, email, tempPassword } = body
 
-  if (!buildingName || !area || !town || !caretakerName || !email) {
+  if (!buildingName || !area || !town || !caretakerName || !email || !tempPassword) {
     return NextResponse.json(
-      { error: 'buildingName, area, town, caretakerName and email are required' },
+      { error: 'buildingName, area, town, caretakerName, email and tempPassword are required' },
       { status: 400 }
     )
   }
@@ -38,10 +39,6 @@ export async function POST(request: Request) {
       { status: 500 }
     )
   }
-
-  // Temporary password the super admin shares with the caretaker.
-  const tempPassword =
-    crypto.randomUUID().replace(/-/g, '').slice(0, 10) + 'Kj!'
 
   // 1. Auth login for the caretaker
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -86,8 +83,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: userError.message }, { status: 400 })
   }
 
+  // 4. Update the building with the admin_user_id (to complete bidirectional link)
+  const { error: updateBuildingError } = await supabase
+    .from('buildings')
+    .update({ admin_user_id: authData.user.id })
+    .eq('id', building.id)
+
+  if (updateBuildingError) {
+    await supabase.from('users').delete().eq('id', authData.user.id)
+    await supabase.from('buildings').delete().eq('id', building.id)
+    await supabase.auth.admin.deleteUser(authData.user.id)
+    return NextResponse.json({ error: updateBuildingError.message }, { status: 400 })
+  }
+
+  // Fetch updated building just to be safe
+  const { data: finalBuilding } = await supabase
+    .from('buildings')
+    .select('*')
+    .eq('id', building.id)
+    .single()
+
   return NextResponse.json({
-    building,
+    building: finalBuilding,
     caretaker: { email, tempPassword },
   })
 }
