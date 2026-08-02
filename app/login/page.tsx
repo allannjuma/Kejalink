@@ -25,7 +25,7 @@ export default function LoginPage() {
     setSuccess('')
 
     if (isSignUp) {
-      // Call server-side route that uses the Admin API (no email confirmation required)
+      // 1. Create account via server-side admin API (no email confirmation required)
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -39,7 +39,15 @@ export default function LoginPage() {
         return
       }
 
-      setSuccess('Account created! Logging you in...')
+      // 2. Now sign the user in so we have an active session
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      if (signInError) {
+        setLoading(false)
+        setError(signInError.message)
+        return
+      }
+
+      setSuccess('Account created! Redirecting...')
     } else {
       // Login flow
       const { error: signInError } = await supabase.auth.signInWithPassword({
