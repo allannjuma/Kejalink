@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [role, setRole] = useState<'super_admin' | 'building_admin'>('building_admin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
@@ -28,7 +29,7 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, role }),
       })
 
       const result = await res.json()
@@ -91,14 +92,27 @@ export default function LoginPage() {
         
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           {isSignUp && (
-            <input
-              type="text"
-              placeholder="Full Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              className={inputClass}
-            />
+            <>
+              <input
+                type="text"
+                placeholder="Full Name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                className={inputClass}
+              />
+              <div>
+                <label className="block text-xs font-semibold text-zinc-500 mb-1 ml-1">Sign up as</label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as 'super_admin' | 'building_admin')}
+                  className={inputClass + ' w-full bg-white cursor-pointer'}
+                >
+                  <option value="building_admin">🏠 Building Admin (Caretaker)</option>
+                  <option value="super_admin">🛡️ Super Admin</option>
+                </select>
+              </div>
+            </>
           )}
           <input
             type="email"

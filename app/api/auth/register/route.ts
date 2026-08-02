@@ -3,10 +3,14 @@ import { createAdminClient } from '@/lib/supabase-admin'
 
 export async function POST(req: Request) {
   try {
-    const { name, email, password } = await req.json()
+    const { name, email, password, role } = await req.json()
+    const validRoles = ['super_admin', 'building_admin']
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: 'All fields are required.' }, { status: 400 })
+    }
+    if (role && !validRoles.includes(role)) {
+      return NextResponse.json({ error: 'Invalid role.' }, { status: 400 })
     }
 
     const adminClient = createAdminClient()
@@ -27,7 +31,7 @@ export async function POST(req: Request) {
       id: authData.user.id,
       name,
       email,
-      role: 'super_admin',
+      role: role || 'building_admin',
       verified: true,
     })
 
