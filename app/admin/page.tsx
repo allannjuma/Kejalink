@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { timeAgo } from '@/lib/time'
+import { EditAdminModal, EditAdminForm } from '@/components/EditAdminModal'
 
 type Stats = {
   buildings: number
@@ -34,6 +35,7 @@ export default function AdminOverview() {
   const [stats, setStats] = useState<Stats | null>(null)
   const [admins, setAdmins] = useState<BuildingAdmin[]>([])
   const [error, setError] = useState('')
+  const [editingAdmin, setEditingAdmin] = useState<EditAdminForm | null>(null)
 
   useEffect(() => {
     async function load() {
@@ -127,11 +129,40 @@ export default function AdminOverview() {
                     ? `quiet for ${Math.floor(quietDays)} days`
                     : `updated ${timeAgo(admin.updated_at)}`}
                 </span>
+                
+                <button
+                  onClick={() => setEditingAdmin({
+                    id: admin.id,
+                    name: admin.name,
+                    phone: admin.phone,
+                    email: admin.email
+                  })}
+                  className="ml-4 rounded-lg bg-zinc-100 px-3 py-1.5 text-sm font-medium text-zinc-600 hover:bg-zinc-200"
+                >
+                  Edit
+                </button>
               </li>
             )
           })}
         </ul>
       </section>
+
+      {editingAdmin && (
+        <EditAdminModal
+          admin={editingAdmin}
+          onClose={() => setEditingAdmin(null)}
+          onSuccess={(updated) => {
+            setAdmins((prev) =>
+              prev.map((a) =>
+                a.id === updated.id
+                  ? { ...a, name: updated.name, phone: updated.phone, email: updated.email }
+                  : a
+              )
+            )
+            setEditingAdmin(null)
+          }}
+        />
+      )}
     </div>
   )
 }
