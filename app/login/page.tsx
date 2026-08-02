@@ -9,78 +9,36 @@ const inputClass =
 
 export default function LoginPage() {
   const router = useRouter()
-  const [isSignUp, setIsSignUp] = useState(false)
-  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<'super_admin' | 'building_admin'>('building_admin')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState('')
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setSuccess('')
 
-    if (isSignUp) {
-      // 1. Create account via server-side admin API (no email confirmation required)
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, role }),
-      })
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
-      const result = await res.json()
-      if (!res.ok) {
-        setLoading(false)
-        setError(result.error || 'Registration failed')
-        return
-      }
-
-      // 2. Now sign the user in so we have an active session
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-      if (signInError) {
-        setLoading(false)
-        setError(signInError.message)
-        return
-      }
-
-      setSuccess('Account created! Redirecting...')
-    } else {
-      // Login flow
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      })
-
-      if (signInError) {
-        setLoading(false)
-        setError(signInError.message)
-        return
-      }
+    if (error) {
+      setLoading(false)
+      setError(error.message)
+      return
     }
 
-    // After success (either login or auto-login from signup)
     // Send each role to its own panel
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) {
-      setLoading(false)
-      // Sometimes signup requires email confirmation, so user might be null here
-      if (isSignUp) {
-        setError('Check your email to confirm your account (if enabled in Supabase).')
-      }
-      return
-    }
-
     const { data: profile } = await supabase
       .from('users')
       .select('role')
-      .eq('id', user.id)
+      .eq('id', user?.id ?? '')
       .single()
 
     setLoading(false)
@@ -91,37 +49,11 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center min-h-screen bg-emerald-50/40 p-4">
+    <div className="flex flex-1 items-center justify-center bg-emerald-50/40">
       <main className="w-full max-w-sm rounded-2xl border border-emerald-100 bg-white p-8 shadow-sm">
-        <h1 className="mb-1 text-2xl font-bold text-zinc-900">
-          {isSignUp ? 'Create Admin Account' : 'Log in'}
-        </h1>
+        <h1 className="mb-1 text-2xl font-bold text-zinc-900">Log in</h1>
         <p className="mb-6 text-sm text-zinc-500">KejaLink caretakers &amp; admins</p>
-        
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {isSignUp && (
-            <>
-              <input
-                type="text"
-                placeholder="Full Name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                className={inputClass}
-              />
-              <div>
-                <label className="block text-xs font-semibold text-zinc-500 mb-1 ml-1">Sign up as</label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value as 'super_admin' | 'building_admin')}
-                  className={inputClass + ' w-full bg-white cursor-pointer'}
-                >
-                  <option value="building_admin">🏠 Building Admin (Caretaker)</option>
-                  <option value="super_admin">🛡️ Super Admin</option>
-                </select>
-              </div>
-            </>
-          )}
+        <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <input
             type="email"
             placeholder="Email"
@@ -138,33 +70,15 @@ export default function LoginPage() {
             required
             className={inputClass}
           />
-          
           {error && <p className="text-sm text-red-600">{error}</p>}
-          {success && <p className="text-sm text-emerald-600 font-medium">{success}</p>}
-          
           <button
             type="submit"
             disabled={loading}
-            className="min-h-11 rounded-xl bg-emerald-600 font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50 mt-2"
+            className="min-h-11 rounded-xl bg-emerald-600 font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
           >
-            {loading ? 'Please wait…' : (isSignUp ? 'Sign Up' : 'Log in')}
+            {loading ? 'Logging in…' : 'Log in'}
           </button>
         </form>
-
-        <div className="mt-6 text-center text-sm text-zinc-500">
-          {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
-          <button 
-            type="button"
-            onClick={() => {
-              setIsSignUp(!isSignUp)
-              setError('')
-              setSuccess('')
-            }}
-            className="text-emerald-600 font-medium hover:underline"
-          >
-            {isSignUp ? 'Log in' : 'Create one'}
-          </button>
-        </div>
       </main>
     </div>
   )
