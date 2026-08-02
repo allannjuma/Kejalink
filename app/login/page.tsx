@@ -24,36 +24,21 @@ export default function LoginPage() {
     setSuccess('')
 
     if (isSignUp) {
-      // 1. Sign up user
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
+      // Call server-side route that uses the Admin API (no email confirmation required)
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
       })
 
-      if (signUpError) {
+      const result = await res.json()
+      if (!res.ok) {
         setLoading(false)
-        setError(signUpError.message)
+        setError(result.error || 'Registration failed')
         return
       }
 
-      if (data?.user) {
-        // 2. Insert into public.users as super_admin
-        const { error: insertError } = await supabase.from('users').insert({
-          id: data.user.id,
-          name: name || 'Admin',
-          email: email,
-          role: 'super_admin',
-          verified: true
-        })
-
-        if (insertError) {
-          setLoading(false)
-          setError(insertError.message)
-          return
-        }
-
-        setSuccess('Account created! Logging you in...')
-      }
+      setSuccess('Account created! Logging you in...')
     } else {
       // Login flow
       const { error: signInError } = await supabase.auth.signInWithPassword({
