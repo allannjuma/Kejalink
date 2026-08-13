@@ -63,14 +63,30 @@ export function BuildingAdminProvider({
         town: string
       } | null
 
-      if (
-        error ||
-        !data ||
-        data.role !== 'building_admin' ||
-        !data.building_id ||
-        !building
-      ) {
-        setError('This account is not linked to a building admin account.')
+      // DEBUG: log exactly what came back so we can see which check fails
+      console.log('[building-admin] user.id:', user.id)
+      console.log('[building-admin] data:', JSON.stringify(data, null, 2))
+      console.log('[building-admin] error:', error)
+      console.log('[building-admin] building:', building)
+
+      if (error) {
+        setError(`DB error: ${error.message}`)
+        return
+      }
+      if (!data) {
+        setError('No profile row found in public.users for this auth user.')
+        return
+      }
+      if (data.role !== 'building_admin') {
+        setError(`Wrong role: "${data.role}" — expected "building_admin".`)
+        return
+      }
+      if (!data.building_id) {
+        setError('Profile exists but building_id is NULL — run fix-links.sql in Supabase.')
+        return
+      }
+      if (!building) {
+        setError('building_id is set but the buildings row could not be loaded.')
         return
       }
 

@@ -1,16 +1,73 @@
 'use client'
 
-import { useState } from 'react'
-import { X, Smartphone, Loader2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { motion } from 'framer-motion'
+import { X, Smartphone, Loader2, CheckCircle2, ShieldCheck, BadgeCheck } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+
+/* Skill: animation.md — modal enter 150–200ms, ease-out, scale from 0.96 */
+const EASE_OUT = [0.23, 1, 0.32, 1] as const
+
+const POLL_INTERVAL_MS = 3000
+const POLL_MAX_ATTEMPTS = 40 // ~2 minutes
+
+type Phase = 'form' | 'waiting' | 'success' | 'failed'
 
 export function UnlockModal({ onClose }: { onClose: () => void }) {
   const [phone, setPhone] = useState('')
   const [hours, setHours] = useState<24 | 48>(48)
   const [loading, setLoading] = useState(false)
-  const [success, setSuccess] = useState(false)
+  const [phase, setPhase] = useState<Phase>('form')
   const [error, setError] = useState('')
   const router = useRouter()
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopPolling = () => {
+    if (pollTimer.current) {
+      clearInterval(pollTimer.current)
+      pollTimer.current = null
+    }
+  }
+
+  useEffect(() => stopPolling, [])
+
+  const handlePaid = () => {
+    stopPolling()
+    setPhase('success')
+    setTimeout(() => {
+      router.refresh()
+      onClose()
+    }, 3000)
+  }
+
+  const startPolling = (checkoutRequestId: string) => {
+    let attempts = 0
+    pollTimer.current = setInterval(async () => {
+      attempts++
+      try {
+        const res = await fetch(`/api/mpesa/status?checkoutRequestId=${encodeURIComponent(checkoutRequestId)}`)
+        const data = await res.json()
+        if (data.status === 'paid') {
+          handlePaid()
+        } else if (data.status === 'failed') {
+          stopPolling()
+          setError('Payment was declined or cancelled. Try again.')
+          setPhase('failed')
+        } else if (attempts >= POLL_MAX_ATTEMPTS) {
+          stopPolling()
+          setError('We could not confirm your payment in time. If you were charged, it will be refunded — try again.')
+          setPhase('failed')
+        }
+      } catch {
+        // Network hiccup — keep polling until the attempt cap.
+        if (attempts >= POLL_MAX_ATTEMPTS) {
+          stopPolling()
+          setError('We could not confirm your payment in time. Try again.')
+          setPhase('failed')
+        }
+      }
+    }, POLL_INTERVAL_MS)
+  }
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -27,85 +84,151 @@ export function UnlockModal({ onClose }: { onClose: () => void }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Payment failed to initiate')
 
-      setSuccess(true)
-      
-      // If it's mocked, it might be instant, so we refresh the page after 2 seconds
-      setTimeout(() => {
-        router.refresh()
-        onClose()
-      }, 3000)
-    } catch (err: any) {
-      setError(err.message)
+      if (data.mock) {
+        // Mock mode: the pass is already paid, unlock instantly.
+        handlePaid()
+      } else {
+        setPhase('waiting')
+        startPolling(data.checkoutRequestId)
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Payment failed to initiate')
     } finally {
       setLoading(false)
     }
   }
 
+  const handleClose = () => {
+    stopPolling()
+    onClose()
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-        <div className="relative p-6 border-b border-zinc-100 dark:border-zinc-800">
-          <button 
-            onClick={onClose}
-            className="absolute top-4 right-4 p-2 text-zinc-400 hover:text-zinc-900 dark:hover:text-white rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.18 }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !loading && phase !== 'waiting') handleClose()
+      }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+    >
+      <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Unlock premium access"
+        initial={{ opacity: 0, scale: 0.96 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.2, ease: EASE_OUT }}
+        className="w-full max-w-md overflow-hidden rounded-3xl border border-line bg-card shadow-2xl"
+      >
+        <div className="relative border-b border-line p-6">
+          <button
+            onClick={handleClose}
+            aria-label="Close"
+            className="absolute right-4 top-4 rounded-full p-2 text-muted-ink transition-colors hover:bg-soft hover:text-ink active:scale-95"
           >
             <X size={20} />
           </button>
-          <h2 className="text-xl font-bold text-center text-zinc-900 dark:text-zinc-100">
+          <p className="text-center text-xs font-bold uppercase tracking-[0.2em] text-gold">Kejalink Pass</p>
+          <h2 className="mt-2 text-center font-display text-2xl font-semibold text-ink">
             Unlock Premium Access
           </h2>
-          <p className="text-sm text-center text-zinc-500 mt-2">
+          <p className="mt-2 text-center text-sm text-muted-ink">
             View exact locations, caretaker contacts, and book viewings instantly.
           </p>
         </div>
 
-        {success ? (
-          <div className="p-8 text-center flex flex-col items-center">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4 dark:bg-emerald-900/30 dark:text-emerald-400">
-              <Smartphone size={32} />
-            </div>
-            <h3 className="text-lg font-bold mb-2 text-zinc-900 dark:text-zinc-100">Check your phone!</h3>
-            <p className="text-zinc-500 dark:text-zinc-400">
-              An M-Pesa prompt has been sent to <strong>{phone}</strong>. Enter your PIN to complete the payment.
+        {phase === 'success' ? (
+          <div className="flex flex-col items-center p-8 text-center">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.25, ease: EASE_OUT }}
+              className="animate-pulse-ring mb-4 grid size-16 place-items-center rounded-full bg-gold text-gold-ink"
+            >
+              <CheckCircle2 size={30} />
+            </motion.div>
+            <h3 className="mb-2 font-display text-xl font-semibold text-ink">Payment received!</h3>
+            <p className="text-sm text-muted-ink">
+              Your pass is active. Unlocking this listing…
             </p>
-            <p className="text-xs text-zinc-400 mt-4">Unlocking in a few seconds...</p>
+            <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-ink">
+              <Loader2 size={12} className="animate-spin" />
+              Unlocking in a few seconds…
+            </p>
+          </div>
+        ) : phase === 'waiting' ? (
+          <div className="flex flex-col items-center p-8 text-center">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ duration: 0.25, ease: EASE_OUT }}
+              className="animate-pulse-ring mb-4 grid size-16 place-items-center rounded-full bg-gold text-gold-ink"
+            >
+              <Smartphone size={30} />
+            </motion.div>
+            <h3 className="mb-2 font-display text-xl font-semibold text-ink">Check your phone!</h3>
+            <p className="text-sm text-muted-ink">
+              An M-Pesa prompt has been sent to <strong className="text-ink">{phone}</strong>.
+              Enter your PIN to complete the payment.
+            </p>
+            <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-ink">
+              <Loader2 size={12} className="animate-spin" />
+              Waiting for confirmation…
+            </p>
           </div>
         ) : (
           <form onSubmit={handlePay} className="p-6">
-            <div className="flex gap-4 mb-6">
-              <button
-                type="button"
-                onClick={() => setHours(24)}
-                className={`flex-1 p-4 rounded-2xl border-2 text-center transition-all ${
-                  hours === 24 
-                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' 
-                  : 'border-zinc-200 text-zinc-600 hover:border-emerald-200 dark:border-zinc-800 dark:text-zinc-400'
-                }`}
-              >
-                <div className="text-sm font-medium mb-1">24 Hours</div>
-                <div className="text-xl font-bold">KES 150</div>
-              </button>
-              <button
-                type="button"
-                onClick={() => setHours(48)}
-                className={`flex-1 p-4 rounded-2xl border-2 text-center transition-all ${
-                  hours === 48 
-                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400' 
-                  : 'border-zinc-200 text-zinc-600 hover:border-emerald-200 dark:border-zinc-800 dark:text-zinc-400'
-                }`}
-              >
-                <div className="text-sm font-medium mb-1">48 Hours</div>
-                <div className="text-xl font-bold">KES 200</div>
-              </button>
+            {/* Plan picker */}
+            <div className="mb-6 grid grid-cols-2 gap-3">
+              {([
+                { value: 24 as const, price: 150, tag: null },
+                { value: 48 as const, price: 200, tag: 'Best value' },
+              ]).map((plan) => {
+                const active = hours === plan.value
+                return (
+                  <button
+                    key={plan.value}
+                    type="button"
+                    onClick={() => setHours(plan.value)}
+                    aria-pressed={active}
+                    className={`relative rounded-2xl border-2 p-4 text-left transition-all duration-150 active:scale-[0.97] ${
+                      active
+                        ? 'border-gold bg-gold/10 shadow-md shadow-gold/10'
+                        : 'border-line bg-paper hover:border-gold/40'
+                    }`}
+                  >
+                    {plan.tag && (
+                      <span className="absolute -top-2.5 right-3 rounded-full bg-gold px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-gold-ink shadow">
+                        {plan.tag}
+                      </span>
+                    )}
+                    <div className="flex items-center justify-between">
+                      <span className={`text-sm font-medium ${active ? 'text-ink' : 'text-muted-ink'}`}>
+                        {plan.value} Hours
+                      </span>
+                      <span
+                        className={`grid size-5 place-items-center rounded-full border-2 transition-colors ${
+                          active ? 'border-gold bg-gold text-gold-ink' : 'border-line'
+                        }`}
+                      >
+                        {active && <CheckCircle2 size={12} />}
+                      </span>
+                    </div>
+                    <div className="mt-1 font-display text-2xl font-semibold text-ink">
+                      KES {plan.price}
+                    </div>
+                  </button>
+                )
+              })}
             </div>
 
             <div className="mb-6">
-              <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-                M-Pesa Number
-              </label>
+              <label className="mb-2 block text-sm font-medium text-ink">M-Pesa Number</label>
               <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Smartphone className="h-5 w-5 text-zinc-400" />
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                  <Smartphone className="size-5 text-[#4CAF50]" />
                 </div>
                 <input
                   type="tel"
@@ -113,13 +236,13 @@ export function UnlockModal({ onClose }: { onClose: () => void }) {
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="0712 345 678"
-                  className="block w-full pl-10 p-3 bg-zinc-50 border border-zinc-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 dark:bg-zinc-950 dark:border-zinc-800 dark:text-white"
+                  className="block w-full rounded-xl border border-line bg-paper p-3 pl-10 text-ink outline-none transition-shadow placeholder:text-muted-ink/60 focus:border-gold focus:ring-2 focus:ring-gold/40"
                 />
               </div>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-lg dark:bg-red-900/30 dark:text-red-400">
+              <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-600 dark:text-red-400">
                 {error}
               </div>
             )}
@@ -127,18 +250,27 @@ export function UnlockModal({ onClose }: { onClose: () => void }) {
             <button
               type="submit"
               disabled={loading || !phone}
-              className="w-full py-4 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-lg shadow-emerald-200 dark:shadow-none transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              className="shine flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-4 font-semibold text-brand-ink shadow-lg shadow-brand/25 transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : null}
-              {loading ? 'Processing...' : 'Pay with M-Pesa'}
+              {loading
+                ? 'Processing…'
+                : phase === 'failed'
+                  ? `Retry — Pay KES ${hours === 24 ? 150 : 200} with M-Pesa`
+                  : `Pay KES ${hours === 24 ? 150 : 200} with M-Pesa`}
             </button>
-            
-            <p className="text-center text-xs text-zinc-500 mt-4">
-              💸 Full refund if a listing is fake or taken
+
+            <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-muted-ink">
+              <ShieldCheck size={13} className="text-gold" />
+              Full refund if a listing is fake or taken
+            </p>
+            <p className="mt-1.5 flex items-center justify-center gap-1.5 text-center text-xs text-muted-ink">
+              <BadgeCheck size={13} className="text-gold" />
+              Verified in person by the Kejalink team
             </p>
           </form>
         )}
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   )
 }

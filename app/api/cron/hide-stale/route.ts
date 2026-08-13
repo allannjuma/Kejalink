@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 
-// GET /api/cron/hide-stale?secret=YOUR_CRON_SECRET
+// GET /api/cron/hide-stale  (Authorization: Bearer $CRON_SECRET)
 // The stale-listing killer: any room left 'live' without a freshness
 // confirmation for 14+ days is hidden from public search.
-// Wire this to a daily scheduler (Vercel Cron, Supabase pg_cron, or any
-// external pinger). Locally you can just open the URL in a browser.
+// Wired to Vercel Cron via vercel.json (Vercel sends the Bearer header
+// automatically). Locally: curl -H "Authorization: Bearer $CRON_SECRET" ...
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET
 
@@ -19,10 +19,7 @@ export async function GET(request: Request) {
     )
   }
 
-  const { searchParams } = new URL(request.url)
-  const authorized =
-    request.headers.get('authorization') === `Bearer ${secret}` ||
-    searchParams.get('secret') === secret
+  const authorized = request.headers.get('authorization') === `Bearer ${secret}`
 
   if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

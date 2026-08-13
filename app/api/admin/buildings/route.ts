@@ -1,6 +1,49 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 
+function friendlyError(message: string): string {
+  if (message.includes('users_phone_key')) {
+    return 'This phone number is already assigned to another caretaker. Use a different phone number or leave it blank.'
+  }
+  if (message.includes('users_email_key') || message.includes('already registered')) {
+    return 'This email is already registered. Use a different caretaker email.'
+  }
+  if (message.includes('users_pkey') || message.includes('duplicate key value violates unique constraint')) {
+    return 'This user already exists. Use a different caretaker email.'
+  }
+  if (message.includes('buildings_admin_user_id_fkey')) {
+    return 'Database link error: the admin_user_id column may be missing. Run supabase/fix-links.sql in the Supabase SQL editor.'
+  }
+  return message
+}
+
+// GET /api/admin/buildings
+// Returns all buildings with their linked caretaker profile.
+export async function GET() {
+  let supabase
+  try {
+    supabase = createAdminClient()
+  } catch (e) {
+    console.error('[api/admin/buildings GET] config error:', e)
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'Server configuration error' },
+      { status: 500 }
+    )
+  }
+
+  const { data, error } = await supabase
+    .from('buildings')
+    .select('*, users(name, email, phone)')
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('[api/admin/buildings GET] query error:', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ buildings: data ?? [] })
+}
+
 // POST /api/admin/buildings
 // Creates a building + a caretaker auth login + the linked users row.
 // Building admins are ONLY ever created through this route — never self-register.
@@ -9,6 +52,8 @@ export async function POST(request: Request) {
     buildingName?: string
     area?: string
     town?: string
+    lat?: number | null
+    lng?: number | null
     caretakerName?: string
     phone?: string
     email?: string
@@ -21,7 +66,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { buildingName, area, town, caretakerName, phone, email, tempPassword } = body
+  const { buildingName, area, town, lat, lng, caretakerName, phone, email, tempPassword } = body
 
   if (!buildingName || !area || !town || !caretakerName || !email || !tempPassword) {
     return NextResponse.json(
@@ -34,11 +79,14 @@ export async function POST(request: Request) {
   try {
     supabase = createAdminClient()
   } catch (e) {
+    console.error('[api/admin/buildings POST] config error:', e)
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Server configuration error' },
       { status: 500 }
     )
   }
+
+  console.log('[api/admin/buildings POST] creating auth user for:', email)
 
   // 1. Auth login for the caretaker
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
@@ -48,8 +96,9 @@ export async function POST(request: Request) {
   })
 
   if (authError || !authData.user) {
+    console.error('[api/admin/buildings POST] auth error:', authError)
     return NextResponse.json(
-      { error: authError?.message ?? 'Failed to create auth user' },
+      { error: friendlyError(authError?.message ?? 'Failed to create auth user') },
       { status: 400 }
     )
   }
@@ -57,13 +106,20 @@ export async function POST(request: Request) {
   // 2. Building row
   const { data: building, error: buildingError } = await supabase
     .from('buildings')
-    .insert({ name: buildingName, area, town })
+    .insert({
+      name: buildingName,
+      area,
+      town,
+      lat: typeof lat === 'number' ? lat : null,
+      lng: typeof lng === 'number' ? lng : null,
+    })
     .select()
     .single()
 
   if (buildingError) {
+    console.error('[api/admin/buildings POST] building insert error:', buildingError)
     await supabase.auth.admin.deleteUser(authData.user.id)
-    return NextResponse.json({ error: buildingError.message }, { status: 400 })
+    return NextResponse.json({ error: friendlyError(buildingError.message) }, { status: 400 })
   }
 
   // 3. users row linking caretaker to the building
@@ -78,9 +134,10 @@ export async function POST(request: Request) {
   })
 
   if (userError) {
+    console.error('[api/admin/buildings POST] users insert error:', userError)
     await supabase.from('buildings').delete().eq('id', building.id)
     await supabase.auth.admin.deleteUser(authData.user.id)
-    return NextResponse.json({ error: userError.message }, { status: 400 })
+    return NextResponse.json({ error: friendlyError(userError.message) }, { status: 400 })
   }
 
   // 4. Update the building with the admin_user_id (to complete bidirectional link)
@@ -90,10 +147,14 @@ export async function POST(request: Request) {
     .eq('id', building.id)
 
   if (updateBuildingError) {
+    console.error('[api/admin/buildings POST] building update error:', updateBuildingError)
     await supabase.from('users').delete().eq('id', authData.user.id)
     await supabase.from('buildings').delete().eq('id', building.id)
     await supabase.auth.admin.deleteUser(authData.user.id)
-    return NextResponse.json({ error: updateBuildingError.message }, { status: 400 })
+    return NextResponse.json(
+      { error: friendlyError(updateBuildingError.message) },
+      { status: 400 }
+    )
   }
 
   // Fetch updated building just to be safe
@@ -102,6 +163,8 @@ export async function POST(request: Request) {
     .select('*')
     .eq('id', building.id)
     .single()
+
+  console.log('[api/admin/buildings POST] success:', finalBuilding?.id)
 
   return NextResponse.json({
     building: finalBuilding,

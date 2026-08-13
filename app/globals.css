@@ -1,18 +1,225 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: #111827;
+
+  /* Kejalink brand tokens (light) — coral / ink / white / gray */
+  --paper: #ffffff;
+  --ink: #111827;
+  --brand: #ff385c;
+  --brand-ink: #ffffff;
+  --gold: #ff385c;
+  --gold-ink: #ffffff;
+  --card-bg: #ffffff;
+  --line: #e5e7eb;
+  --muted-ink: #9ca3af;
+  --soft: #f3f4f6;
+}
+
+.dark {
+  --background: #111827;
+  --foreground: #f9fafb;
+
+  /* Kejalink brand tokens (dark) */
+  --paper: #111827;
+  --ink: #f9fafb;
+  --brand: #ff385c;
+  --brand-ink: #ffffff;
+  --gold: #ff5c7a;
+  --gold-ink: #ffffff;
+  --card-bg: #1f2937;
+  --line: #374151;
+  --muted-ink: #9ca3af;
+  --soft: #26303d;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-inter);
+  --font-display: var(--font-fraunces, Georgia, serif);
+
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-gold: var(--gold);
+  --color-gold-ink: var(--gold-ink);
+  --color-card: var(--card-bg);
+  --color-line: var(--line);
+  --color-muted-ink: var(--muted-ink);
+  --color-soft: var(--soft);
+}
+
+/* Spring easings from the spec */
+@utility ease-spring-enter {
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@utility ease-spring-exit {
+  transition-timing-function: cubic-bezier(0.7, 0, 0.84, 0);
+}
+
+/* Toggle thumb spring with a little overshoot */
+@utility ease-toggle {
+  transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Staggered panel items: slide-up + fade */
+@utility panel-item {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.panel-open .panel-item {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.panel-open .panel-item:nth-child(1) { transition-delay: 0.05s; }
+.panel-open .panel-item:nth-child(2) { transition-delay: 0.10s; }
+.panel-open .panel-item:nth-child(3) { transition-delay: 0.15s; }
+.panel-open .panel-item:nth-child(4) { transition-delay: 0.20s; }
+.panel-open .panel-item:nth-child(5) { transition-delay: 0.25s; }
+.panel-open .panel-item:nth-child(6) { transition-delay: 0.30s; }
+.panel-open .panel-item:nth-child(7) { transition-delay: 0.35s; }
+.panel-open .panel-item:nth-child(8) { transition-delay: 0.40s; }
+.panel-open .panel-item:nth-child(9) { transition-delay: 0.45s; }
+.panel-open .panel-item:nth-child(10) { transition-delay: 0.50s; }
+.panel-open .panel-item:nth-child(11) { transition-delay: 0.55s; }
+.panel-open .panel-item:nth-child(12) { transition-delay: 0.60s; }
+
+/* ── Redesign: ambient animations ─────────────────────────────── */
+
+@keyframes blob-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(40px, -50px) scale(1.12); }
+  66% { transform: translate(-30px, 30px) scale(0.92); }
+}
+.animate-blob { animation: blob-drift 14s ease-in-out infinite; }
+.animate-blob-slow { animation: blob-drift 22s ease-in-out infinite reverse; }
+
+@keyframes marquee-x {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.animate-marquee { animation: marquee-x 28s linear infinite; }
+.marquee-paused:hover .animate-marquee { animation-play-state: paused; }
+
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-10px); }
+}
+.animate-float { animation: float-y 5s ease-in-out infinite; }
+
+@keyframes pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(255, 56, 92, 0.45); }
+  100% { box-shadow: 0 0 0 18px rgba(255, 56, 92, 0); }
+}
+.animate-pulse-ring { animation: pulse-ring 1.1s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+
+/* Entrance animation for server-rendered pages (no JS needed) */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Dotted artwork overlay */
+.art-pattern {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.22) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+}
+.art-pattern-dark {
+  background-image: radial-gradient(rgba(0, 0, 0, 0.18) 1.5px, transparent 1.5px);
+  background-size: 18px 18px;
+}
+
+/* Shine sweep on hover */
+.shine {
+  position: relative;
+  overflow: hidden;
+}
+.shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.35) 50%, transparent 60%);
+  transform: translateX(-120%);
+  transition: transform 0.7s ease;
+  pointer-events: none;
+}
+.shine:hover::after {
+  transform: translateX(120%);
+}
+
+/* Scroll reveal (toggled by Reveal component) */
+.reveal {
+  opacity: 0;
+  transform: translateY(28px);
+  transition: opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1), transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Minimal, theme-aware scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(92, 107, 98, 0.35);
+  border-radius: 9999px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(154, 167, 155, 0.35);
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  transition: background-color 0.5s ease, color 0.5s ease;
+}
+
+/* ── Accessibility & motion discipline ────────────────────────── */
+
+/* Respect reduced-motion: keep gentle fades, kill movement */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+/* Shine sweep only makes sense on precise pointers (no false taps on touch) */
+@media (hover: none), (pointer: coarse) {
+  .shine::after {
+    display: none;
+  }
 }

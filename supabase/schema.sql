@@ -8,6 +8,8 @@ create table if not exists buildings (
   name text not null,
   area text not null,
   town text not null,
+  lat double precision,
+  lng double precision,
   created_at timestamptz not null default now()
 );
 
