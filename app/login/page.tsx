@@ -80,7 +80,7 @@ export default function CaretakerLoginPage() {
       .from('users')
       .select('role')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
     setLoading(false)
 
@@ -89,8 +89,18 @@ export default function CaretakerLoginPage() {
       return
     }
 
-    if (profile?.role === 'super_admin') router.push('/admin')
-    else if (profile?.role === 'building_admin') router.push('/dashboard')
+    if (!profile) {
+      // Auth account exists but has no row in public.users — e.g. the account
+      // was created in the Supabase dashboard instead of via registration.
+      await supabase.auth.signOut()
+      setError(
+        'Your account has no profile yet. Ask your admin to provision your login again.'
+      )
+      return
+    }
+
+    if (profile.role === 'super_admin') router.push('/admin')
+    else if (profile.role === 'building_admin') router.push('/dashboard')
     else router.push('/')
   }
 
