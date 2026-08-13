@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { createAdminClient } from '@/lib/supabase-admin'
+import { createAdminClient, findAuthUserByEmail, isDuplicateEmailError } from '@/lib/supabase-admin'
 
 function friendlyError(message: string): string {
   if (message.includes('users_phone_key')) {
@@ -88,7 +88,13 @@ export async function POST(request: Request) {
 
   console.log('[api/admin/buildings POST] creating auth user for:', email)
 
-  // 1. Auth login for the caretaker
+  // 1. Auth login for the caretaker. If the email already exists in Auth but
+  // has no public.users row (an orphaned account from an earlier failed
+  // attempt), adopt it: reset its password to the new temp password and link
+  // the profile below. A registered email WITH a profile is still rejected.
+  let authUserId: string
+  let adoptedOrphan = false
+
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email,
     password: tempPassword,
@@ -96,11 +102,51 @@ export async function POST(request: Request) {
   })
 
   if (authError || !authData.user) {
-    console.error('[api/admin/buildings POST] auth error:', authError)
-    return NextResponse.json(
-      { error: friendlyError(authError?.message ?? 'Failed to create auth user') },
-      { status: 400 }
-    )
+    if (!isDuplicateEmailError(authError)) {
+      console.error('[api/admin/buildings POST] auth error:', authError)
+      return NextResponse.json(
+        { error: friendlyError(authError?.message ?? 'Failed to create auth user') },
+        { status: 400 }
+      )
+    }
+
+    const { user: existing, error: lookupError } = await findAuthUserByEmail(supabase, email)
+    if (lookupError || !existing) {
+      console.error('[api/admin/buildings POST] orphan lookup error:', lookupError)
+      return NextResponse.json(
+        { error: friendlyError(authError?.message ?? 'Failed to create auth user') },
+        { status: 400 }
+      )
+    }
+
+    const { data: existingProfile } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', existing.id)
+      .maybeSingle()
+
+    if (existingProfile) {
+      return NextResponse.json(
+        { error: 'This email is already registered. Use a different caretaker email.' },
+        { status: 400 }
+      )
+    }
+
+    const { error: adoptError } = await supabase.auth.admin.updateUserById(existing.id, {
+      password: tempPassword,
+      email_confirm: true,
+    })
+
+    if (adoptError) {
+      console.error('[api/admin/buildings POST] orphan adopt error:', adoptError)
+      return NextResponse.json({ error: friendlyError(adoptError.message) }, { status: 400 })
+    }
+
+    authUserId = existing.id
+    adoptedOrphan = true
+    console.log('[api/admin/buildings POST] adopted orphaned auth user for:', email)
+  } else {
+    authUserId = authData.user.id
   }
 
   // 2. Building row
@@ -118,13 +164,14 @@ export async function POST(request: Request) {
 
   if (buildingError) {
     console.error('[api/admin/buildings POST] building insert error:', buildingError)
-    await supabase.auth.admin.deleteUser(authData.user.id)
+    // An adopted orphan pre-existed this request — leave its auth account alone.
+    if (!adoptedOrphan) await supabase.auth.admin.deleteUser(authUserId)
     return NextResponse.json({ error: friendlyError(buildingError.message) }, { status: 400 })
   }
 
   // 3. users row linking caretaker to the building
   const { error: userError } = await supabase.from('users').insert({
-    id: authData.user.id,
+    id: authUserId,
     name: caretakerName,
     email,
     phone: phone ?? null,
@@ -136,21 +183,21 @@ export async function POST(request: Request) {
   if (userError) {
     console.error('[api/admin/buildings POST] users insert error:', userError)
     await supabase.from('buildings').delete().eq('id', building.id)
-    await supabase.auth.admin.deleteUser(authData.user.id)
+    if (!adoptedOrphan) await supabase.auth.admin.deleteUser(authUserId)
     return NextResponse.json({ error: friendlyError(userError.message) }, { status: 400 })
   }
 
   // 4. Update the building with the admin_user_id (to complete bidirectional link)
   const { error: updateBuildingError } = await supabase
     .from('buildings')
-    .update({ admin_user_id: authData.user.id })
+    .update({ admin_user_id: authUserId })
     .eq('id', building.id)
 
   if (updateBuildingError) {
     console.error('[api/admin/buildings POST] building update error:', updateBuildingError)
-    await supabase.from('users').delete().eq('id', authData.user.id)
+    await supabase.from('users').delete().eq('id', authUserId)
     await supabase.from('buildings').delete().eq('id', building.id)
-    await supabase.auth.admin.deleteUser(authData.user.id)
+    if (!adoptedOrphan) await supabase.auth.admin.deleteUser(authUserId)
     return NextResponse.json(
       { error: friendlyError(updateBuildingError.message) },
       { status: 400 }
