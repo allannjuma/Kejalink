@@ -41,6 +41,7 @@ type Building = {
   area: string
   town: string
   created_at: string
+  admin_user_id: string | null
   users: Caretaker | Caretaker[] | null
 }
 
@@ -122,6 +123,33 @@ function BuildingListCard({ building }: { building: CreatedBuilding }) {
     ? building.users[0]
     : building.users
 
+  const [resetPassword, setResetPassword] = useState<string | null>(null)
+  const [resetting, setResetting] = useState(false)
+  const [resetError, setResetError] = useState('')
+
+  // Passwords are hashed in Auth and can never be displayed after creation —
+  // resetting generates a fresh temp password and shows it here once.
+  async function handleResetPassword() {
+    if (!building.admin_user_id) return
+    setResetting(true)
+    setResetError('')
+    try {
+      const res = await fetch(
+        `/api/admin/users/${building.admin_user_id}/reset-password`,
+        { method: 'POST' }
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? `Reset failed (status ${res.status})`)
+      setResetPassword(data.tempPassword)
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : 'Reset failed')
+    } finally {
+      setResetting(false)
+    }
+  }
+
+  const visiblePassword = building.tempPassword ?? resetPassword
+
   return (
     <div
       className={`rounded-2xl border bg-white p-5 shadow-sm transition-all hover:shadow-md ${
@@ -176,18 +204,34 @@ function BuildingListCard({ building }: { building: CreatedBuilding }) {
         </p>
         <div className="flex flex-col gap-2">
           <CredentialRow label="Email" value={caretaker?.email ?? '—'} />
-          {building.tempPassword ? (
+          {visiblePassword ? (
             <CredentialRow
               label="Password (copy now)"
-              value={building.tempPassword}
+              value={visiblePassword}
               isPassword
             />
           ) : (
             <div className="rounded-xl bg-zinc-50 px-3 py-2">
               <p className="text-[10px] font-medium text-zinc-400">Password</p>
               <p className="text-xs text-zinc-400">
-                Password not shown — use forgot-password if needed.
+                Stored as a hash — not viewable. Reset to generate a new one.
               </p>
+              <button
+                type="button"
+                onClick={handleResetPassword}
+                disabled={resetting || !building.admin_user_id}
+                className="mt-2 flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {resetting ? (
+                  <RefreshCw size={12} className="animate-spin" />
+                ) : (
+                  <Lock size={12} />
+                )}
+                {resetting ? 'Resetting…' : 'Reset password'}
+              </button>
+              {resetError && (
+                <p className="mt-1.5 text-xs text-red-600">{resetError}</p>
+              )}
             </div>
           )}
         </div>

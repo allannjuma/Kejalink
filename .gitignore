@@ -39,3 +39,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# kimi work agent artifacts
+.agents/
+.kimi-code/
+skills-lock.json

@@ -20,6 +20,7 @@ import {
   MapPin,
   Clock,
   AlertCircle,
+  Wallet,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { timeAgo } from '@/lib/time'
@@ -54,6 +55,14 @@ type RecentBuilding = {
     | { name: string; email: string; phone: string | null }
     | { name: string; email: string; phone: string | null }[]
     | null
+}
+
+type PassRow = {
+  status: string
+  amount: number
+  hours: number
+  expires_at: string | null
+  created_at: string
 }
 
 /* ─── Animated Counter ───────────────────────────────────────────────── */
@@ -151,6 +160,24 @@ function KpiCard({
         {sub && <p className={`mt-1 text-xs font-medium ${text[color]}`}>{sub}</p>}
       </div>
     </Link>
+  )
+}
+
+/* ─── Revenue stat ───────────────────────────────────────────────────── */
+
+function RevenueStat({ label, value }: { label: string; value: number | undefined }) {
+  const count = useCountUp(value)
+  return (
+    <div className="rounded-xl bg-zinc-50 p-4">
+      <p className="text-xl font-bold text-zinc-900">
+        {value === undefined ? (
+          <span className="inline-block h-6 w-20 animate-pulse rounded-lg bg-zinc-200" />
+        ) : (
+          <>KES {count.toLocaleString()}</>
+        )}
+      </p>
+      <p className="mt-0.5 text-xs font-medium text-zinc-500">{label}</p>
+    </div>
   )
 }
 
@@ -329,6 +356,7 @@ export default function AdminOverview() {
   const [loading, setLoading] = useState(true)
   const [editingAdmin, setEditingAdmin] = useState<EditAdminForm | null>(null)
   const [now] = useState(() => Date.now())
+  const [passes, setPasses] = useState<PassRow[] | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -359,6 +387,15 @@ export default function AdminOverview() {
         .limit(6)
       if (bldgsErr) throw new Error(bldgsErr.message)
       setBuildings((bldgsData as unknown as RecentBuilding[]) ?? [])
+
+      // Passes revenue via the admin API (non-fatal if it fails)
+      try {
+        const passesRes = await fetch('/api/admin/passes', { cache: 'no-store' })
+        const passesJson = await passesRes.json()
+        setPasses(passesRes.ok ? ((passesJson.passes as PassRow[]) ?? []) : [])
+      } catch {
+        setPasses([])
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load data')
     } finally {
@@ -367,7 +404,6 @@ export default function AdminOverview() {
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount; state updates happen in async continuations
     load()
   }, [load])
 
@@ -382,6 +418,26 @@ export default function AdminOverview() {
     month: 'long',
     day: 'numeric',
   })
+
+  // Passes revenue computations
+  const nowLocal = new Date()
+  const startOfToday = new Date(
+    nowLocal.getFullYear(),
+    nowLocal.getMonth(),
+    nowLocal.getDate()
+  ).getTime()
+  const weekAgo = startOfToday - 6 * 86_400_000
+  const paidPassRows = (passes ?? []).filter((p) => p.status === 'paid')
+  const todayRevenue = paidPassRows
+    .filter((p) => new Date(p.created_at).getTime() >= startOfToday)
+    .reduce((s, p) => s + (p.amount ?? 0), 0)
+  const weekRevenue = paidPassRows
+    .filter((p) => new Date(p.created_at).getTime() >= weekAgo)
+    .reduce((s, p) => s + (p.amount ?? 0), 0)
+  const totalRevenue = paidPassRows.reduce((s, p) => s + (p.amount ?? 0), 0)
+  const activePassCount = (passes ?? []).filter(
+    (p) => p.status === 'paid' && !!p.expires_at && new Date(p.expires_at).getTime() > Date.now()
+  ).length
 
   return (
     <div className="flex flex-col gap-8">
@@ -486,6 +542,34 @@ export default function AdminOverview() {
           <span>{(stats?.rooms ?? 0) - (stats?.vacant ?? 0)} others</span>
         </div>
       </div>
+
+      {/* Passes revenue */}
+      <section className="rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Wallet size={18} className="text-emerald-600" />
+            <h2 className="font-bold text-zinc-900">Passes revenue</h2>
+            {activePassCount > 0 && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                {activePassCount} active
+              </span>
+            )}
+          </div>
+          <Link
+            href="/admin/passes"
+            className="flex items-center gap-1 text-sm font-medium text-emerald-600 hover:text-emerald-700"
+          >
+            Open payments
+            <ArrowUpRight size={14} />
+          </Link>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <RevenueStat label="Today" value={passes === null ? undefined : todayRevenue} />
+          <RevenueStat label="Last 7 days" value={passes === null ? undefined : weekRevenue} />
+          <RevenueStat label="All time" value={passes === null ? undefined : totalRevenue} />
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-3">
         {/* Recent Buildings */}

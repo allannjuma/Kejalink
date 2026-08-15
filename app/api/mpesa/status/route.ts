@@ -1,47 +1,58 @@
 import { NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
-import { getTenantPhoneSession } from '@/lib/session'
+import { darajaConfigured, stkPushQuery } from '@/lib/mpesa'
 
-// GET /api/mpesa/status?checkoutRequestId=...  (or ?phone=... with a valid session)
-// Used by the client to poll while waiting for the M-Pesa PIN prompt to complete.
+/**
+ * Polled by the unlock modal while the user is entering their M-Pesa PIN.
+ * GET /api/mpesa/status?checkout_request_id=ws_CO_… → { status }
+ *
+ * If the pass is still 'pending' and Daraja is configured, we actively ask
+ * Safaricom (stkpushquery) — so confirmation works even when the callback
+ * URL is unreachable (local dev, tunnel down, etc.).
+ */
 export async function GET(req: Request) {
-  try {
-    const { searchParams } = new URL(req.url)
-    const checkoutRequestId = searchParams.get('checkoutRequestId')
-    const phone = searchParams.get('phone')
-
-    const supabaseAdmin = createAdminClient()
-
-    if (checkoutRequestId) {
-      const { data: pass } = await supabaseAdmin
-        .from('passes')
-        .select('status')
-        .eq('checkout_request_id', checkoutRequestId)
-        .single()
-
-      return NextResponse.json({ status: pass?.status ?? 'not_found' })
-    }
-
-    if (phone) {
-      const sessionPhone = await getTenantPhoneSession()
-      if (!sessionPhone || sessionPhone !== phone) {
-        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-      }
-
-      const { data: pass } = await supabaseAdmin
-        .from('passes')
-        .select('status')
-        .eq('phone', phone)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      return NextResponse.json({ status: pass?.status ?? 'not_found' })
-    }
-
-    return NextResponse.json({ error: 'checkoutRequestId or phone is required' }, { status: 400 })
-  } catch (error) {
-    console.error('M-Pesa status error:', error)
-    return NextResponse.json({ error: 'Failed to check payment status' }, { status: 500 })
+  const checkoutRequestId = new URL(req.url).searchParams.get('checkout_request_id')
+  if (!checkoutRequestId) {
+    return NextResponse.json({ error: 'checkout_request_id is required' }, { status: 400 })
   }
+
+  const supabaseAdmin = createAdminClient()
+  const { data, error } = await supabaseAdmin
+    .from('passes')
+    .select('status')
+    .eq('checkout_request_id', checkoutRequestId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    console.error('Status check failed:', error)
+    return NextResponse.json({ error: 'Status check failed' }, { status: 500 })
+  }
+
+  let status: string = data?.status ?? 'unknown'
+
+  // Fallback: callback hasn't arrived — query Daraja directly.
+  if (status === 'pending' && darajaConfigured()) {
+    try {
+      const outcome = await stkPushQuery(checkoutRequestId)
+      if (outcome !== 'processing') {
+        const { error: updateError } = await supabaseAdmin
+          .from('passes')
+          .update({ status: outcome })
+          .eq('checkout_request_id', checkoutRequestId)
+          .eq('status', 'pending') // never overwrite a settled pass
+
+        if (updateError) {
+          console.error('Failed to settle pass from query fallback:', updateError)
+        } else {
+          status = outcome
+        }
+      }
+    } catch (err) {
+      console.error('STK query fallback failed (keeping pending):', err)
+    }
+  }
+
+  return NextResponse.json({ status })
 }

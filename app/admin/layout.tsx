@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -8,6 +8,7 @@ import {
   Building2,
   ClipboardCheck,
   Flag,
+  Wallet,
   ShieldCheck,
   Menu,
   X,
@@ -16,13 +17,13 @@ import {
   LogOut,
   Zap,
 } from 'lucide-react'
-import { SuperAdminProvider, useSuperAdmin } from '@/lib/super-admin'
 
 const navItems = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard, exact: true },
   { href: '/admin/buildings', label: 'Buildings', icon: Building2, exact: false },
   { href: '/admin/approvals', label: 'Approvals', icon: ClipboardCheck, exact: false },
   { href: '/admin/reports', label: 'Reports', icon: Flag, exact: false },
+  { href: '/admin/passes', label: 'Passes', icon: Wallet, exact: false },
 ]
 
 type NavItemDef = (typeof navItems)[0]
@@ -31,10 +32,12 @@ function SidebarNavItem({
   item,
   pathname,
   onClick,
+  badge,
 }: {
   item: NavItemDef
   pathname: string
   onClick?: () => void
+  badge?: number
 }) {
   const active = item.exact ? pathname === item.href : pathname.startsWith(item.href)
   const Icon = item.icon
@@ -55,6 +58,12 @@ function SidebarNavItem({
         }
       />
       <span className="flex-1">{item.label}</span>
+      {badge !== undefined && badge > 0 && (
+        <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-400">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+          {badge}
+        </span>
+      )}
       {active && (
         <ChevronRight size={14} className="text-emerald-500/50" />
       )}
@@ -62,10 +71,16 @@ function SidebarNavItem({
   )
 }
 
-function Sidebar({ isMobile, onClose }: { isMobile?: boolean; onClose?: () => void }) {
+function Sidebar({
+  isMobile,
+  onClose,
+  pendingPasses = 0,
+}: {
+  isMobile?: boolean
+  onClose?: () => void
+  pendingPasses?: number
+}) {
   const pathname = usePathname()
-  const admin = useSuperAdmin()
-  const initial = admin?.name?.trim().charAt(0).toUpperCase() || 'A'
 
   return (
     <aside className="flex h-full w-64 flex-col bg-zinc-950 border-r border-white/[0.06]">
@@ -101,6 +116,7 @@ function Sidebar({ isMobile, onClose }: { isMobile?: boolean; onClose?: () => vo
             item={item}
             pathname={pathname}
             onClick={isMobile ? onClose : undefined}
+            badge={item.href === '/admin/passes' ? pendingPasses : 0}
           />
         ))}
       </nav>
@@ -109,11 +125,11 @@ function Sidebar({ isMobile, onClose }: { isMobile?: boolean; onClose?: () => vo
       <div className="border-t border-white/[0.06] p-3">
         <div className="flex items-center gap-3 rounded-xl px-3 py-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-sm font-bold text-emerald-400 ring-1 ring-emerald-500/30">
-            {initial}
+            A
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-zinc-200">{admin?.name ?? 'Super Admin'}</p>
-            <p className="truncate text-xs text-zinc-500">{admin?.email ?? ''}</p>
+            <p className="truncate text-sm font-semibold text-zinc-200">Super Admin</p>
+            <p className="truncate text-xs text-zinc-500">admin@kejalink.co.ke</p>
           </div>
           <button
             className="shrink-0 rounded-lg p-1.5 text-zinc-600 transition-colors hover:bg-red-500/10 hover:text-red-400"
@@ -130,14 +146,33 @@ function Sidebar({ isMobile, onClose }: { isMobile?: boolean; onClose?: () => vo
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [pendingPasses, setPendingPasses] = useState(0)
 
-  // Close the mobile nav on navigation — adjust state during render instead of
-  // in an effect (https://react.dev/learn/you-might-not-need-an-effect).
-  const [prevPathname, setPrevPathname] = useState(pathname)
-  if (prevPathname !== pathname) {
-    setPrevPathname(pathname)
+  useEffect(() => {
     setMobileOpen(false)
-  }
+  }, [pathname])
+
+  // Poll pending pass payments so the sidebar can flag them live
+  useEffect(() => {
+    let cancelled = false
+    const fetchPending = async () => {
+      try {
+        const res = await fetch('/api/admin/passes', { cache: 'no-store' })
+        const json = await res.json()
+        if (!res.ok || cancelled) return
+        const list = (json.passes as { status: string }[]) ?? []
+        setPendingPasses(list.filter((p) => p.status === 'pending').length)
+      } catch {
+        // Sidebar badge is best-effort; ignore failures silently
+      }
+    }
+    fetchPending()
+    const id = setInterval(fetchPending, 30000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [])
 
   // Get current page title for the top bar
   const currentNav = navItems.find((item) =>
@@ -145,11 +180,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   )
 
   return (
-    <SuperAdminProvider>
     <div className="flex min-h-screen bg-zinc-50">
       {/* Desktop sidebar — fixed */}
       <div className="hidden md:fixed md:inset-y-0 md:left-0 md:z-30 md:flex md:w-64 md:flex-col">
-        <Sidebar />
+        <Sidebar pendingPasses={pendingPasses} />
       </div>
 
       {/* Mobile overlay */}
@@ -160,7 +194,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             onClick={() => setMobileOpen(false)}
           />
           <div className="absolute inset-y-0 left-0 z-10 flex w-64 flex-col shadow-2xl">
-            <Sidebar isMobile onClose={() => setMobileOpen(false)} />
+            <Sidebar isMobile onClose={() => setMobileOpen(false)} pendingPasses={pendingPasses} />
           </div>
         </div>
       )}
@@ -203,6 +237,5 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </main>
       </div>
     </div>
-    </SuperAdminProvider>
   )
 }

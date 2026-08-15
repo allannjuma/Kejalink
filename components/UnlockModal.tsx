@@ -2,76 +2,68 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { X, Smartphone, Loader2, CheckCircle2, ShieldCheck, BadgeCheck } from 'lucide-react'
+import { X, Smartphone, Loader2, CheckCircle2, ShieldCheck, BadgeCheck, AlertTriangle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 
 /* Skill: animation.md — modal enter 150–200ms, ease-out, scale from 0.96 */
 const EASE_OUT = [0.23, 1, 0.32, 1] as const
 
 const POLL_INTERVAL_MS = 3000
-const POLL_MAX_ATTEMPTS = 40 // ~2 minutes
-
-type Phase = 'form' | 'waiting' | 'success' | 'failed'
+const POLL_TIMEOUT_MS = 90000
 
 export function UnlockModal({ onClose }: { onClose: () => void }) {
   const [phone, setPhone] = useState('')
   const [hours, setHours] = useState<24 | 48>(48)
   const [loading, setLoading] = useState(false)
-  const [phase, setPhase] = useState<Phase>('form')
+  const [success, setSuccess] = useState(false)
   const [error, setError] = useState('')
+  const [checkoutId, setCheckoutId] = useState<string | null>(null)
+  const [confirmed, setConfirmed] = useState(false)
+  const [waitedTooLong, setWaitedTooLong] = useState(false)
   const router = useRouter()
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const stopPolling = () => {
-    if (pollTimer.current) {
-      clearInterval(pollTimer.current)
-      pollTimer.current = null
-    }
-  }
+  // Poll the status endpoint until Daraja's callback settles the pass.
+  useEffect(() => {
+    if (!checkoutId || confirmed) return
 
-  useEffect(() => stopPolling, [])
-
-  const handlePaid = () => {
-    stopPolling()
-    setPhase('success')
-    setTimeout(() => {
-      router.refresh()
-      onClose()
-    }, 3000)
-  }
-
-  const startPolling = (checkoutRequestId: string) => {
-    let attempts = 0
+    const startedAt = Date.now()
     pollTimer.current = setInterval(async () => {
-      attempts++
+      if (Date.now() - startedAt > POLL_TIMEOUT_MS) {
+        if (pollTimer.current) clearInterval(pollTimer.current)
+        setWaitedTooLong(true)
+        return
+      }
       try {
-        const res = await fetch(`/api/mpesa/status?checkoutRequestId=${encodeURIComponent(checkoutRequestId)}`)
+        const res = await fetch(`/api/mpesa/status?checkout_request_id=${encodeURIComponent(checkoutId)}`)
         const data = await res.json()
         if (data.status === 'paid') {
-          handlePaid()
+          if (pollTimer.current) clearInterval(pollTimer.current)
+          setConfirmed(true)
+          setTimeout(() => {
+            router.refresh()
+            onClose()
+          }, 1500)
         } else if (data.status === 'failed') {
-          stopPolling()
-          setError('Payment was declined or cancelled. Try again.')
-          setPhase('failed')
-        } else if (attempts >= POLL_MAX_ATTEMPTS) {
-          stopPolling()
-          setError('We could not confirm your payment in time. If you were charged, it will be refunded — try again.')
-          setPhase('failed')
+          if (pollTimer.current) clearInterval(pollTimer.current)
+          setSuccess(false)
+          setCheckoutId(null)
+          setError('Payment was cancelled or declined. No charge was made — try again.')
         }
       } catch {
-        // Network hiccup — keep polling until the attempt cap.
-        if (attempts >= POLL_MAX_ATTEMPTS) {
-          stopPolling()
-          setError('We could not confirm your payment in time. Try again.')
-          setPhase('failed')
-        }
+        /* transient network error — keep polling */
       }
     }, POLL_INTERVAL_MS)
-  }
+
+    return () => {
+      if (pollTimer.current) clearInterval(pollTimer.current)
+    }
+  }, [checkoutId, confirmed, router, onClose])
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setWaitedTooLong(false)
     setLoading(true)
 
     try {
@@ -84,23 +76,24 @@ export function UnlockModal({ onClose }: { onClose: () => void }) {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Payment failed to initiate')
 
+      setSuccess(true)
+
       if (data.mock) {
-        // Mock mode: the pass is already paid, unlock instantly.
-        handlePaid()
+        // Mock mode: pass is instantly paid, just refresh.
+        setConfirmed(true)
+        setTimeout(() => {
+          router.refresh()
+          onClose()
+        }, 2500)
       } else {
-        setPhase('waiting')
-        startPolling(data.checkoutRequestId)
+        // Real Daraja: wait for the callback via polling.
+        setCheckoutId(data.checkoutRequestId)
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Payment failed to initiate')
+      setError(err instanceof Error ? err.message : 'Payment failed. Please try again.')
     } finally {
       setLoading(false)
     }
-  }
-
-  const handleClose = () => {
-    stopPolling()
-    onClose()
   }
 
   return (
@@ -109,7 +102,7 @@ export function UnlockModal({ onClose }: { onClose: () => void }) {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.18 }}
       onClick={(e) => {
-        if (e.target === e.currentTarget && !loading && phase !== 'waiting') handleClose()
+        if (e.target === e.currentTarget && !loading) onClose()
       }}
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
     >
@@ -124,7 +117,7 @@ export function UnlockModal({ onClose }: { onClose: () => void }) {
       >
         <div className="relative border-b border-line p-6">
           <button
-            onClick={handleClose}
+            onClick={onClose}
             aria-label="Close"
             className="absolute right-4 top-4 rounded-full p-2 text-muted-ink transition-colors hover:bg-soft hover:text-ink active:scale-95"
           >
@@ -139,44 +132,44 @@ export function UnlockModal({ onClose }: { onClose: () => void }) {
           </p>
         </div>
 
-        {phase === 'success' ? (
+        {success ? (
           <div className="flex flex-col items-center p-8 text-center">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ duration: 0.25, ease: EASE_OUT }}
-              className="animate-pulse-ring mb-4 grid size-16 place-items-center rounded-full bg-gold text-gold-ink"
+              className={`mb-4 grid size-16 place-items-center rounded-full ${
+                confirmed ? 'animate-pulse-ring bg-gold text-gold-ink' : 'bg-gold/15 text-gold'
+              }`}
             >
-              <CheckCircle2 size={30} />
+              {confirmed ? <CheckCircle2 size={30} /> : <Smartphone size={30} />}
             </motion.div>
-            <h3 className="mb-2 font-display text-xl font-semibold text-ink">Payment received!</h3>
-            <p className="text-sm text-muted-ink">
-              Your pass is active. Unlocking this listing…
-            </p>
-            <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-ink">
-              <Loader2 size={12} className="animate-spin" />
-              Unlocking in a few seconds…
-            </p>
-          </div>
-        ) : phase === 'waiting' ? (
-          <div className="flex flex-col items-center p-8 text-center">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: 0.25, ease: EASE_OUT }}
-              className="animate-pulse-ring mb-4 grid size-16 place-items-center rounded-full bg-gold text-gold-ink"
-            >
-              <Smartphone size={30} />
-            </motion.div>
-            <h3 className="mb-2 font-display text-xl font-semibold text-ink">Check your phone!</h3>
-            <p className="text-sm text-muted-ink">
-              An M-Pesa prompt has been sent to <strong className="text-ink">{phone}</strong>.
-              Enter your PIN to complete the payment.
-            </p>
-            <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-ink">
-              <Loader2 size={12} className="animate-spin" />
-              Waiting for confirmation…
-            </p>
+
+            {confirmed ? (
+              <>
+                <h3 className="mb-2 font-display text-xl font-semibold text-ink">Payment confirmed!</h3>
+                <p className="text-sm text-muted-ink">Unlocking your pass…</p>
+              </>
+            ) : (
+              <>
+                <h3 className="mb-2 font-display text-xl font-semibold text-ink">Check your phone!</h3>
+                <p className="text-sm text-muted-ink">
+                  An M-Pesa prompt has been sent to <strong className="text-ink">{phone}</strong>.
+                  Enter your PIN to complete the payment.
+                </p>
+                <p className="mt-4 flex items-center gap-1.5 text-xs text-muted-ink">
+                  <Loader2 size={12} className="animate-spin" />
+                  Waiting for M-Pesa confirmation…
+                </p>
+                {waitedTooLong && (
+                  <p className="mt-3 flex items-start gap-1.5 rounded-xl border border-gold/30 bg-gold/10 p-3 text-left text-xs text-muted-ink">
+                    <AlertTriangle size={14} className="mt-0.5 shrink-0 text-gold" />
+                    Still waiting. If you already entered your PIN, the unlock will apply
+                    automatically once Safaricom confirms — you can close this and refresh.
+                  </p>
+                )}
+              </>
+            )}
           </div>
         ) : (
           <form onSubmit={handlePay} className="p-6">
@@ -253,11 +246,7 @@ export function UnlockModal({ onClose }: { onClose: () => void }) {
               className="shine flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-4 font-semibold text-brand-ink shadow-lg shadow-brand/25 transition-all duration-150 hover:brightness-110 active:scale-[0.98] disabled:opacity-50"
             >
               {loading ? <Loader2 className="animate-spin" size={20} /> : null}
-              {loading
-                ? 'Processing…'
-                : phase === 'failed'
-                  ? `Retry — Pay KES ${hours === 24 ? 150 : 200} with M-Pesa`
-                  : `Pay KES ${hours === 24 ? 150 : 200} with M-Pesa`}
+              {loading ? 'Processing…' : `Pay KES ${hours === 24 ? 150 : 200} with M-Pesa`}
             </button>
 
             <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-muted-ink">

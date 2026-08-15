@@ -14,8 +14,36 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "Kejalink — Find your next home, zero broker fees",
-  description: "Browse verified rooms and apartments across Kenya. Unlock exact locations and caretaker contacts instantly.",
+  metadataBase: new URL("https://kejalink.co.ke"),
+  title: {
+    default: "Kejalink — Find your next home, zero broker fees",
+    template: "%s · Kejalink",
+  },
+  description:
+    "Browse verified rooms and apartments across Kenya. Unlock exact locations and caretaker contacts instantly.",
+  keywords: [
+    "rooms for rent Kenya",
+    "apartments Kenya",
+    "bedsitters Nairobi",
+    "house hunting Kenya",
+    "no broker fees",
+    "Kejalink",
+  ],
+  openGraph: {
+    type: "website",
+    siteName: "Kejalink",
+    locale: "en_KE",
+    title: "Kejalink — Find your next home, zero broker fees",
+    description:
+      "Browse verified rooms and apartments across Kenya. Unlock exact locations and caretaker contacts instantly.",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Kejalink — Find your next home, zero broker fees",
+    description:
+      "Browse verified rooms and apartments across Kenya. Unlock exact locations and caretaker contacts instantly.",
+  },
+  robots: { index: true, follow: true },
 };
 
 export default function RootLayout({
