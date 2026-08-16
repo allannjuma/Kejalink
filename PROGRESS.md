@@ -91,3 +91,17 @@ Newest entries at the bottom. Each entry: what was done, files changed, build st
 - Files changed: `components/HomeSections.tsx`, `components/RoomGallery.tsx`, `app/search/page.tsx`, `app/admin/approvals/page.tsx`, `app/admin/reports/page.tsx`, `app/dashboard/page.tsx`, `app/dashboard/layout.tsx`, `app/dashboard/bookings/page.tsx`, `app/dashboard/settings/page.tsx`
 - Build: passed (all routes)
 - Synced to Desktop: yes
+
+
+---
+
+## 2026-08-16 23:00 — Item 11: Caretaker dashboard polish (manual run, main session)
+
+- Replaced dead "Views this week —" stat with real "Awaiting approval" count (blue accent)
+- Added Refresh button in header (extracted load into reusable callback)
+- Added state filter chips (All / Vacant / Taken / Awaiting) with counts above the room list
+- Converted RoomRow raw <img> to next/image
+- Data logic untouched
+- Files changed: `app/dashboard/page.tsx`
+- Build: passed (27/27 routes)
+- Synced to Desktop: yes

@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import {
   DoorOpen,
   CalendarDays,
@@ -16,6 +17,9 @@ import {
   BedDouble,
   Sparkles,
   EyeOff,
+  RefreshCw,
+  ClipboardCheck,
+  Filter,
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useBuildingAdmin } from '@/lib/building-admin'
@@ -137,12 +141,13 @@ function StatCard({
   label: string
   value: React.ReactNode
   icon: React.ElementType
-  accent: 'emerald' | 'amber' | 'zinc'
+  accent: 'emerald' | 'amber' | 'zinc' | 'blue'
 }) {
   const accents: Record<string, string> = {
     emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
     amber: 'bg-amber-50 text-amber-700 ring-amber-200',
     zinc: 'bg-zinc-100 text-zinc-700 ring-zinc-200',
+    blue: 'bg-blue-50 text-blue-700 ring-blue-200',
   }
   return (
     <div className="rounded-2xl border border-zinc-100 bg-white p-5 shadow-sm">
@@ -192,10 +197,11 @@ function RoomRow({
     >
       <div className="flex flex-wrap items-start gap-4">
         {room.photos[0] ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          <Image
             src={room.photos[0]}
             alt={room.name}
+            width={80}
+            height={80}
             className="h-20 w-20 rounded-xl object-cover"
           />
         ) : (
@@ -339,38 +345,35 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true)
   const [acting, setActing] = useState(false)
   const [showDemo, setShowDemo] = useState(false)
+  const [roomFilter, setRoomFilter] = useState<'all' | 'live' | 'taken' | 'pending_approval'>('all')
 
-  useEffect(() => {
+  const load = useCallback(async () => {
     if (!admin) return
-    let cancelled = false
-    ;(async () => {
-      setLoading(true)
-      setFetchError('')
-      try {
-        const { rooms, inquiries, error } = await fetchDashboard(admin.buildingId)
-        if (cancelled) return
-        if (error) {
-          console.error('[dashboard] fetch error:', error)
-          setFetchError(error)
-        }
-        setRooms(rooms)
-        setInquiries(inquiries)
-        if (rooms.length === 0) {
-          setShowDemo(true)
-        }
-      } catch (err) {
-        if (cancelled) return
-        const message = err instanceof Error ? err.message : String(err)
-        console.error('[dashboard] fetch exception:', message)
-        setFetchError(message)
-      } finally {
-        if (!cancelled) setLoading(false)
+    setLoading(true)
+    setFetchError('')
+    try {
+      const { rooms, inquiries, error } = await fetchDashboard(admin.buildingId)
+      if (error) {
+        console.error('[dashboard] fetch error:', error)
+        setFetchError(error)
       }
-    })()
-    return () => {
-      cancelled = true
+      setRooms(rooms)
+      setInquiries(inquiries)
+      if (rooms.length === 0) {
+        setShowDemo(true)
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[dashboard] fetch exception:', message)
+      setFetchError(message)
+    } finally {
+      setLoading(false)
     }
   }, [admin])
+
+  useEffect(() => {
+    load()
+  }, [load])
 
   function showDemos() {
     setShowDemo(true)
@@ -446,6 +449,12 @@ function DashboardContent() {
   const displayedRooms =
     rooms.length === 0 && showDemo ? DEMO_ROOMS : rooms
   const liveRooms = displayedRooms.filter((r) => r.state === 'live')
+  const pendingRooms = displayedRooms.filter((r) => r.state === 'pending_approval')
+  const takenRooms = displayedRooms.filter((r) => r.state === 'taken')
+  const filteredRooms =
+    roomFilter === 'all'
+      ? displayedRooms
+      : displayedRooms.filter((r) => r.state === roomFilter)
   const staleRooms = liveRooms.filter(
     (r) => now - new Date(r.last_confirmed_at).getTime() > TWELVE_DAYS_MS
   )
@@ -481,6 +490,14 @@ function DashboardContent() {
               {showDemo ? 'Hide demo' : 'Show demo'}
             </button>
           )}
+          <button
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={loading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
           <Link
             href="/dashboard/add-room"
             className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
@@ -506,10 +523,10 @@ function DashboardContent() {
           accent="amber"
         />
         <StatCard
-          label="Views this week"
-          value="—"
-          icon={Eye}
-          accent="zinc"
+          label="Awaiting approval"
+          value={pendingRooms.length}
+          icon={ClipboardCheck}
+          accent="blue"
         />
       </div>
 
@@ -558,16 +575,57 @@ function DashboardContent() {
       ) : displayedRooms.length === 0 ? (
         <EmptyState onShowDemo={showDemos} />
       ) : (
-        <ul className="flex flex-col gap-4">
-          {displayedRooms.map((room) => (
-            <RoomRow
-              key={room.id}
-              room={room}
-              onUpdate={updateRoom}
-              acting={acting}
-            />
-          ))}
-        </ul>
+        <>
+          {/* State filter chips */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Filter size={14} className="text-zinc-400" />
+            {([
+              { key: 'all', label: 'All', count: displayedRooms.length },
+              { key: 'live', label: 'Vacant', count: liveRooms.length },
+              { key: 'taken', label: 'Taken', count: takenRooms.length },
+              { key: 'pending_approval', label: 'Awaiting', count: pendingRooms.length },
+            ] as const).map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => setRoomFilter(tab.key)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                  roomFilter === tab.key
+                    ? 'bg-zinc-900 text-white shadow'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-zinc-200'
+                }`}
+              >
+                {tab.label}
+                <span
+                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                    roomFilter === tab.key
+                      ? 'bg-white/20 text-white'
+                      : 'bg-white text-zinc-700'
+                  }`}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {filteredRooms.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-zinc-200 bg-white p-10 text-center">
+              <p className="font-medium text-zinc-900">No rooms in this category</p>
+              <p className="text-sm text-zinc-500">Try a different filter.</p>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-4">
+              {filteredRooms.map((room) => (
+                <RoomRow
+                  key={room.id}
+                  room={room}
+                  onUpdate={updateRoom}
+                  acting={acting}
+                />
+              ))}
+            </ul>
+          )}
+        </>
       )}
     </div>
   )
