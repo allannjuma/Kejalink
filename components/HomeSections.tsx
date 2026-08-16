@@ -61,6 +61,7 @@ export function Navbar() {
             ['Listings', '#listings'],
             ['How it works', '#how-it-works'],
             ['All homes', '/search'],
+            ['Favorites', '/favorites'],
           ].map(([label, href]) => (
             <Link
               key={href}

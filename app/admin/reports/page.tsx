@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Image from 'next/image'
 import {
   Flag,
   AlertTriangle,
@@ -127,10 +128,11 @@ function ReportCard({
         <div className="flex items-start gap-3">
           {/* Room photo */}
           {report.rooms?.photos?.[0] ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <Image
               src={report.rooms.photos[0]}
               alt={report.rooms.name}
+              width={56}
+              height={56}
               className="h-14 w-14 shrink-0 rounded-xl object-cover"
             />
           ) : (

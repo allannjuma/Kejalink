@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase'
 import { ListingCard } from '@/components/ListingCard'
 import { Map, MapRoom } from '@/components/Map'
+import { RecentSearches } from '@/components/RecentSearches'
 import Link from 'next/link'
 import { Search, MapPin, Home as HomeIcon, SearchX, BadgeCheck, CalendarClock, Ban } from 'lucide-react'
 
@@ -39,66 +40,7 @@ async function searchRooms(area: string, type: string, max: string) {
     })
     return []
   }
-  // The join is many-to-one, so `buildings` is a single object at runtime even
-  // though the untyped client infers an array — normalize it here.
-  return data.map((row) => ({
-    ...row,
-    buildings: Array.isArray(row.buildings) ? row.buildings[0] : row.buildings,
-  }))
-}
-
-type RoomRow = {
-  id: string
-  name: string
-  type: string
-  rent: number
-  photos: string[]
-  last_confirmed_at: string
-  available_date: string | null
-  buildings: {
-    name: string
-    area: string
-    town: string
-    lat: number | null
-    lng: number | null
-  }
-}
-
-type RatedRoom = RoomRow & {
-  rating_average?: number | null
-  rating_count?: number
-}
-
-// One aggregate query for all listed rooms — averages computed in JS (no N+1).
-async function attachRatings(rooms: RoomRow[]): Promise<RatedRoom[]> {
-  if (rooms.length === 0) return rooms
-
-  const { data, error } = await supabase
-    .from('reviews')
-    .select('room_id, rating')
-    .in('room_id', rooms.map((room) => room.id))
-
-  if (error) {
-    console.error('Ratings fetch error:', error)
-    return rooms
-  }
-
-  const totals: Record<string, { sum: number; count: number }> = {}
-  for (const row of data ?? []) {
-    const t = totals[row.room_id] ?? { sum: 0, count: 0 }
-    t.sum += row.rating
-    t.count += 1
-    totals[row.room_id] = t
-  }
-
-  return rooms.map((room) => {
-    const t = totals[room.id]
-    return {
-      ...room,
-      rating_average: t ? Math.round((t.sum / t.count) * 10) / 10 : null,
-      rating_count: t?.count ?? 0,
-    }
-  })
+  return data
 }
 
 export default async function SearchPage({
@@ -111,9 +53,9 @@ export default async function SearchPage({
   const type = typeof resolvedParams.type === 'string' ? resolvedParams.type : ''
   const max = typeof resolvedParams.max === 'string' ? resolvedParams.max : ''
 
-  const rooms = await attachRatings(await searchRooms(area, type, max))
+  const rooms = await searchRooms(area, type, max)
 
-  const mapRooms: MapRoom[] = rooms.map((room) => ({
+  const mapRooms: MapRoom[] = rooms.map((room: any) => ({
     id: room.id,
     name: room.name,
     type: room.type,
@@ -181,6 +123,7 @@ export default async function SearchPage({
             <Search size={18} />
           </button>
         </form>
+        <RecentSearches area={area} type={type} max={max} />
       </div>
 
       {/* Results */}
@@ -214,23 +157,37 @@ export default async function SearchPage({
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
           {rooms.map((room, i) => (
-            <ListingCard key={room.id} room={room} index={i} />
+            <ListingCard key={(room as any).id} room={room as any} index={i} />
           ))}
         </div>
 
         {rooms.length === 0 && (
-          <div className="animate-fade-up flex flex-col items-center rounded-3xl border border-dashed border-line py-24 text-center">
-            <span className="grid size-14 place-items-center rounded-full bg-soft text-muted-ink">
-              <SearchX size={24} />
+          <div className="animate-fade-up mt-8 flex flex-col items-center rounded-3xl border border-dashed border-line bg-card/60 px-6 py-20 text-center">
+            <span className="grid size-20 place-items-center rounded-full bg-brand/10 text-brand">
+              <SearchX size={34} />
             </span>
-            <h3 className="mt-4 font-display text-xl font-semibold text-ink">No exact matches</h3>
-            <p className="mt-2 text-sm text-muted-ink">Try adjusting your filters to see more results.</p>
-            <Link
-              href="/search"
-              className="mt-5 rounded-full border border-line bg-card px-6 py-2.5 text-sm font-semibold text-ink transition-all hover:border-gold hover:text-gold active:scale-95"
-            >
-              Clear filters
-            </Link>
+            <h3 className="mt-6 font-display text-2xl font-semibold text-ink">
+              No rooms match your search
+            </h3>
+            <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-ink">
+              {area || type || max
+                ? 'Nothing came up for these filters right now. Try widening your search — a nearby area, a different room type, or a higher budget.'
+                : 'There are no verified rooms listed at the moment. New homes are added daily, so check back soon.'}
+            </p>
+            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+              <Link
+                href="/search"
+                className="shine flex items-center gap-2 rounded-2xl bg-brand px-6 py-3 text-sm font-semibold text-brand-ink shadow-lg shadow-brand/25 transition-transform hover:scale-105 active:scale-95"
+              >
+                Clear filters &amp; browse all
+              </Link>
+              <Link
+                href="/"
+                className="flex items-center gap-2 rounded-2xl border border-line bg-card px-6 py-3 text-sm font-semibold text-ink transition-all hover:border-gold hover:text-gold active:scale-[0.97]"
+              >
+                Back to homepage
+              </Link>
+            </div>
           </div>
         )}
       </main>

@@ -145,7 +145,7 @@ function BookingCard({
           </div>
         </div>
         <span
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${statusBadge[booking.status] ?? statusBadge.pending}`}
+          className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${statusBadge[booking.status] ?? statusBadge.pending}`}
         >
           {booking.status}
         </span>
@@ -154,7 +154,7 @@ function BookingCard({
       <div className="mt-4 grid grid-cols-1 gap-2 text-sm text-zinc-600 sm:grid-cols-2">
         <a
           href={`tel:${booking.phone}`}
-          className="inline-flex items-center gap-1.5 text-emerald-700 hover:underline"
+          className="inline-flex items-center gap-1.5 font-medium text-emerald-700 hover:underline"
         >
           <Phone size={14} />
           {booking.phone}
@@ -211,19 +211,19 @@ function BookingCard({
 
 function EmptyState({ onShowDemo }: { onShowDemo: () => void }) {
   return (
-    <div className="rounded-2xl border border-dashed border-zinc-200 bg-white p-12 text-center">
+    <div className="rounded-2xl border border-dashed border-zinc-200 bg-white p-8 text-center sm:p-12">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
         <CalendarDays size={28} />
       </div>
       <p className="mt-4 text-lg font-semibold text-zinc-900">
         No booking requests yet
       </p>
-      <p className="text-sm text-zinc-500">
+      <p className="mt-1 text-sm text-zinc-500">
         Inquiries from tenants will show up here.
       </p>
       <button
         onClick={onShowDemo}
-        className="mt-4 inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800"
+        className="mt-6 inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-5 py-2.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
       >
         <Sparkles size={16} />
         Preview demo bookings
@@ -355,8 +355,9 @@ function BookingsContent() {
 
   if (!admin) {
     return (
-      <div className="flex flex-1 items-center justify-center p-8 text-zinc-500">
-        Loading…
+      <div className="flex flex-1 items-center justify-center p-8">
+        <Loader2 size={24} className="animate-spin text-zinc-400" />
+        <span className="sr-only">Loading…</span>
       </div>
     )
   }
@@ -387,7 +388,7 @@ function BookingsContent() {
           <button
             onClick={refresh}
             disabled={acting !== null || loading}
-            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm hover:bg-zinc-50 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 disabled:opacity-50"
           >
             {acting !== null || loading ? (
               <Loader2 size={16} className="animate-spin" />

@@ -97,7 +97,7 @@ export default function SettingsPage() {
               <Mail size={14} />
               {admin?.email ?? '—'}
             </p>
-            <p className="mt-1 text-xs text-zinc-400">
+            <p className="mt-1 font-mono text-xs text-zinc-400">
               Building ID: {admin?.buildingId ?? '—'}
             </p>
           </div>
@@ -117,8 +117,8 @@ export default function SettingsPage() {
         onSubmit={handleSubmit}
         className="rounded-2xl border border-zinc-100 bg-white p-6 shadow-sm sm:p-8"
       >
-        <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+        <div className="mb-6 flex items-center gap-2.5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
             <Building2 size={18} />
           </div>
           <h2 className="text-lg font-bold text-zinc-900">Building details</h2>
@@ -176,8 +176,8 @@ export default function SettingsPage() {
 
         <div className="my-8 border-t border-zinc-100" />
 
-        <div className="mb-6 flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100 text-emerald-700">
+        <div className="mb-6 flex items-center gap-2.5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700">
             <User size={18} />
           </div>
           <h2 className="text-lg font-bold text-zinc-900">Contact details</h2>

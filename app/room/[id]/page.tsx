@@ -2,12 +2,12 @@ import { supabase } from '@/lib/supabase'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { getTenantPhoneSession } from '@/lib/session'
 import { notFound } from 'next/navigation'
-import Image from 'next/image'
 import Link from 'next/link'
 import { MapPin, ShieldCheck, Lock, CheckCircle2, Navigation, Phone, AlertTriangle, ArrowLeft, BadgeCheck, Home as HomeIcon, Timer, MessageCircle } from 'lucide-react'
 import { RoomClientView } from './RoomClientView'
 import { Map, MapRoom } from '@/components/Map'
 import { LockedLocation } from '@/components/LockedLocation'
+import { RoomGallery } from '@/components/RoomGallery'
 
 export const dynamic = 'force-dynamic'
 
@@ -138,28 +138,7 @@ export default async function RoomPage({ params }: { params: Promise<{ id: strin
 
       <main className="mx-auto mt-8 max-w-4xl px-4 md:px-8">
         {/* Gallery */}
-        <div className="animate-fade-up mb-8 grid grid-cols-1 gap-4 md:grid-cols-2">
-          {room.photos.length > 0 ? (
-            room.photos.slice(0, 2).map((photo: string, i: number) => (
-              <div
-                key={i}
-                className="shine group relative aspect-[4/3] overflow-hidden rounded-3xl border border-line bg-soft shadow-md shadow-brand/5"
-                style={{ animationDelay: `${i * 120}ms` }}
-              >
-                <Image
-                  src={photo}
-                  alt={`Room photo ${i + 1}`}
-                  fill
-                  className="object-cover transition-transform duration-700 ease-spring-enter group-hover:scale-105"
-                />
-              </div>
-            ))
-          ) : (
-            <div className="relative flex aspect-[4/3] items-center justify-center overflow-hidden rounded-3xl border border-line bg-soft text-muted-ink">
-              No Photos
-            </div>
-          )}
-        </div>
+        <RoomGallery photos={room.photos ?? []} altBase={`${room.type} at ${room.buildings.name}`} />
 
         <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
           <div className="space-y-8 md:col-span-2">

@@ -104,8 +104,8 @@ function Shell({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 className={`flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium transition-all ${
                   active
-                    ? 'bg-emerald-600 text-white'
-                    : 'text-zinc-600 hover:bg-emerald-50'
+                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                    : 'text-zinc-600 hover:bg-emerald-50 hover:text-emerald-700'
                 }`}
               >
                 <Icon size={14} />

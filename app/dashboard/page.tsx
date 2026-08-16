@@ -153,8 +153,10 @@ function StatCard({
           <Icon size={22} />
         </div>
         <div className="text-right">
-          <p className="text-3xl font-bold text-zinc-900">{value}</p>
-          <p className="text-sm text-zinc-500">{label}</p>
+          <p className="text-3xl font-bold tracking-tight text-zinc-900">
+            {value}
+          </p>
+          <p className="mt-0.5 text-sm text-zinc-500">{label}</p>
         </div>
       </div>
     </div>
@@ -223,7 +225,7 @@ function RoomRow({
               </span>
             )}
           </p>
-          <p className="text-sm font-bold text-emerald-700">
+          <p className="mt-0.5 text-sm font-bold text-emerald-700">
             KSh {room.rent.toLocaleString()}/mo
           </p>
           {room.available_date && room.state === 'live' && (
@@ -299,15 +301,15 @@ function RoomRow({
 
 function EmptyState({ onShowDemo }: { onShowDemo: () => void }) {
   return (
-    <div className="rounded-2xl border border-dashed border-zinc-200 bg-white p-12 text-center">
+    <div className="rounded-2xl border border-dashed border-zinc-200 bg-white p-8 text-center sm:p-12">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
         <DoorOpen size={28} />
       </div>
       <p className="mt-4 text-lg font-semibold text-zinc-900">No rooms yet</p>
-      <p className="text-sm text-zinc-500">
+      <p className="mt-1 text-sm text-zinc-500">
         Add your first room to start getting inquiries.
       </p>
-      <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+      <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
         <Link
           href="/dashboard/add-room"
           className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm shadow-emerald-600/20 transition-colors hover:bg-emerald-700"
@@ -450,8 +452,9 @@ function DashboardContent() {
 
   if (!admin) {
     return (
-      <div className="flex flex-1 items-center justify-center p-8 text-zinc-500">
-        Loading…
+      <div className="flex flex-1 items-center justify-center p-8">
+        <Loader2 size={24} className="animate-spin text-zinc-400" />
+        <span className="sr-only">Loading…</span>
       </div>
     )
   }

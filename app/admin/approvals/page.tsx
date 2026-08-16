@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
+import Image from 'next/image'
 import {
   ClipboardCheck,
   Check,
@@ -12,7 +13,6 @@ import {
   Sparkles,
   RefreshCw,
   AlertCircle,
-  Filter,
   CheckSquare,
   Square,
 } from 'lucide-react'
@@ -94,11 +94,12 @@ function PhotoStrip({ photos, name }: { photos: string[]; name: string }) {
   }
   return (
     <div className="relative h-44 overflow-hidden rounded-xl">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <Image
         src={photos[0]}
         alt={name}
-        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+        fill
+        sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 33vw"
+        className="object-cover transition-transform duration-500 group-hover:scale-105"
       />
       {photos.length > 1 && (
         <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-medium text-white backdrop-blur-sm">
@@ -113,6 +114,7 @@ function RoomCard({
   room,
   acting,
   selected,
+  failed,
   onSelect,
   onApprove,
   onReject,
@@ -120,6 +122,7 @@ function RoomCard({
   room: PendingRoom
   acting: string | null
   selected: boolean
+  failed: boolean
   onSelect: (id: string) => void
   onApprove: (id: string) => void
   onReject: (id: string) => void
@@ -130,6 +133,8 @@ function RoomCard({
       className={`group relative flex flex-col rounded-2xl border bg-white shadow-sm transition-all hover:shadow-md ${
         room.demo
           ? 'border-amber-200 bg-amber-50/30'
+          : failed
+          ? 'border-red-300 ring-1 ring-red-200'
           : selected
           ? 'border-emerald-300 ring-1 ring-emerald-200'
           : 'border-zinc-100'
@@ -168,6 +173,12 @@ function RoomCard({
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
                   <Sparkles size={11} />
                   Demo
+                </span>
+              )}
+              {failed && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                  <AlertCircle size={11} />
+                  Approval failed
                 </span>
               )}
             </div>
@@ -229,6 +240,7 @@ export default function ApprovalsPage() {
   const [actedDemoIds, setActedDemoIds] = useState<Set<string>>(new Set())
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [batchActing, setBatchActing] = useState(false)
+  const [bulkResult, setBulkResult] = useState<{ ok: number; failed: string[] } | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -256,6 +268,7 @@ export default function ApprovalsPage() {
   }, [load])
 
   function toggleSelect(id: string) {
+    setBulkResult(null)
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(id)) next.delete(id)
@@ -265,10 +278,12 @@ export default function ApprovalsPage() {
   }
 
   function selectAll() {
+    setBulkResult(null)
     setSelected(new Set(displayedRooms.filter((r) => !r.demo).map((r) => r.id)))
   }
 
   function clearSelection() {
+    setBulkResult(null)
     setSelected(new Set())
   }
 
@@ -296,20 +311,29 @@ export default function ApprovalsPage() {
     setActing(null)
   }
 
-  async function batchApprove() {
-    if (selected.size === 0) return
+  async function bulkApprove() {
+    if (selected.size === 0 || batchActing) return
     setBatchActing(true)
     setActionError('')
-    const ids = Array.from(selected)
-    const { error } = await supabase
-      .from('rooms')
-      .update({ state: 'live', updated_at: new Date().toISOString() })
-      .in('id', ids)
-    if (error) setActionError(error.message)
-    else {
-      clearSelection()
-      await load()
-    }
+    setBulkResult(null)
+    // Approve each selected room with the same single-row update used by the
+    // per-card Approve button, so one failure does not block the rest.
+    const ids = Array.from(selected).filter((id) => !id.startsWith('demo-'))
+    const results = await Promise.allSettled(
+      ids.map(async (id) => {
+        const { error } = await supabase
+          .from('rooms')
+          .update({ state: 'live', updated_at: new Date().toISOString() })
+          .eq('id', id)
+        if (error) throw new Error(error.message)
+      })
+    )
+    const failedIds = ids.filter((_, i) => results[i].status === 'rejected')
+    const okCount = ids.length - failedIds.length
+    setBulkResult({ ok: okCount, failed: failedIds })
+    // Keep failed rows selected so they can be retried.
+    setSelected(new Set(failedIds))
+    await load()
     setBatchActing(false)
   }
 
@@ -319,6 +343,11 @@ export default function ApprovalsPage() {
       : rooms
 
   const realSelected = Array.from(selected).filter((id) => !id.startsWith('demo-'))
+
+  const selectableRooms = displayedRooms.filter((r) => !r.demo)
+  const allSelected =
+    selectableRooms.length > 0 && selectableRooms.every((r) => selected.has(r.id))
+  const someSelected = selectableRooms.some((r) => selected.has(r.id))
 
   return (
     <div className="flex flex-col gap-6">
@@ -375,7 +404,7 @@ export default function ApprovalsPage() {
                 {realSelected.length} selected
               </span>
               <button
-                onClick={batchApprove}
+                onClick={bulkApprove}
                 disabled={batchActing}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white transition-all hover:bg-emerald-700 disabled:opacity-50"
               >
@@ -384,7 +413,7 @@ export default function ApprovalsPage() {
                 ) : (
                   <Check size={13} />
                 )}
-                Approve all
+                Bulk approve ({realSelected.length})
               </button>
               <button
                 onClick={clearSelection}
@@ -396,14 +425,20 @@ export default function ApprovalsPage() {
           </>
         )}
 
-        {displayedRooms.filter((r) => !r.demo).length > 1 && realSelected.length === 0 && (
-          <button
-            onClick={selectAll}
-            className="ml-auto flex items-center gap-1.5 text-sm font-medium text-zinc-500 transition-colors hover:text-emerald-600"
-          >
-            <Filter size={14} />
+        {selectableRooms.length > 0 && (
+          <label className="ml-auto flex cursor-pointer select-none items-center gap-2 text-sm font-medium text-zinc-500 transition-colors hover:text-emerald-600">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = !allSelected && someSelected
+              }}
+              onChange={() => (allSelected ? clearSelection() : selectAll())}
+              disabled={batchActing}
+              className="h-4 w-4 rounded border-zinc-300 accent-emerald-600"
+            />
             Select all
-          </button>
+          </label>
         )}
       </div>
 
@@ -412,6 +447,29 @@ export default function ApprovalsPage() {
         <div className="flex items-start gap-3 rounded-2xl border border-red-100 bg-red-50 p-4 text-sm text-red-700">
           <AlertCircle size={18} className="mt-0.5 shrink-0" />
           <span>{fetchError || actionError}</span>
+        </div>
+      )}
+
+      {/* Bulk approve summary */}
+      {bulkResult && (
+        <div
+          className={`flex items-start gap-3 rounded-2xl border p-4 text-sm ${
+            bulkResult.failed.length > 0
+              ? 'border-amber-200 bg-amber-50 text-amber-800'
+              : 'border-emerald-100 bg-emerald-50 text-emerald-700'
+          }`}
+        >
+          {bulkResult.failed.length > 0 ? (
+            <AlertCircle size={18} className="mt-0.5 shrink-0" />
+          ) : (
+            <Check size={18} className="mt-0.5 shrink-0" />
+          )}
+          <span>
+            Bulk approve finished: {bulkResult.ok} approved
+            {bulkResult.failed.length > 0 &&
+              `, ${bulkResult.failed.length} failed — still selected below so you can retry`}
+            .
+          </span>
         </div>
       )}
 
@@ -447,6 +505,7 @@ export default function ApprovalsPage() {
               room={room}
               acting={acting}
               selected={selected.has(room.id)}
+              failed={bulkResult?.failed.includes(room.id) ?? false}
               onSelect={toggleSelect}
               onApprove={(id) => setRoomState(id, 'live')}
               onReject={(id) => setRoomState(id, 'hidden')}
