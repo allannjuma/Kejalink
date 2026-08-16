@@ -22,12 +22,12 @@ and appends an entry to `PROGRESS.md`. One item per run — smallest safe scope.
 - [x] 4. Favorites page `app/favorites/page.tsx` listing saved rooms from the `kejalink-favorites` localStorage key
 - [x] 5. Search page: recent-searches chips (localStorage), clear-all, and empty-state polish
 - [x] 6. Room page gallery: keyboard arrows navigation + mobile swipe hint + image counter badge
-- [ ] 7. Accessibility pass: aria-labels on icon-only buttons, visible focus rings, alt text audit on user side
+- [x] 7. Accessibility pass: aria-labels on icon-only buttons, visible focus rings, alt text audit on user side
 - [x] 8. Card image performance: audit `next/image` usage vs `<img>`, lazy loading, `remotePatterns` in next.config
 - [x] 9. Admin buildings page: client-side search/filter box over building name/area/town
 - [x] 10. Admin approvals page: select-all + bulk approve action
 - [x] 11. Caretaker dashboard: visual polish pass to match overall quality (keep its data logic untouched)
-- [ ] 12. Final consistency sweep: skeleton loaders everywhere data loads, consistent empty states, `timeAgo` usage
+- [x] 12. Final consistency sweep: skeleton loaders everywhere data loads, consistent empty states, `timeAgo` usage
 
 ## Notes
 

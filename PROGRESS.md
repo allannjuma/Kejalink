@@ -105,3 +105,15 @@ Newest entries at the bottom. Each entry: what was done, files changed, build st
 - Files changed: `app/dashboard/page.tsx`
 - Build: passed (27/27 routes)
 - Synced to Desktop: yes
+
+
+---
+
+## 2026-08-16 23:15 — Item 7: Accessibility pass + Item 12: Final consistency sweep (main session)
+
+- Item 7 audit found the codebase already strong (dialogs have role/aria-modal, modal close buttons labeled, star ratings labeled, favorite toggle labeled). Fixes applied: theme toggle aria-label with current state, aria-pressed on favorites filter / type chips / amenity chips in HomeClient
+- Item 12 sweep verified: every data-loading surface has skeletons + styled empty states (home, search, favorites, room, admin overview/buildings/approvals/reports/passes, caretaker dashboard); timeAgo used consistently; coral user theme + zinc/emerald admin theme consistent
+- Files changed: `components/HomeSections.tsx`, `components/HomeClient.tsx`
+- Build: passed (27/27 routes)
+- Synced to Desktop: yes
+- BACKLOG COMPLETE: 12/12

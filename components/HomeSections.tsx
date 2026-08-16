@@ -78,6 +78,7 @@ export function Navbar() {
             onClick={cycle}
             className="flex items-center gap-2 rounded-full px-3 py-2 text-sm text-muted-ink transition-colors hover:text-ink"
             title="Theme: click to cycle light → dark → system"
+            aria-label={`Theme: ${mounted ? theme : 'system'}. Click to cycle light, dark, system`}
           >
             <ThemeIcon size={16} key={mounted ? theme : 'ssr'} />
             <span className="hidden capitalize sm:inline">{mounted ? theme : 'theme'}</span>

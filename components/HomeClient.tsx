@@ -407,6 +407,7 @@ export function HomeClient({ rooms }: HomeClientProps) {
           </div>
           <button
             onClick={() => setShowFavoritesOnly((v) => !v)}
+            aria-pressed={showFavoritesOnly}
             className={`flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-[0.97] ${
               showFavoritesOnly
                 ? 'border-gold bg-gold text-gold-ink shadow-md'
@@ -466,6 +467,7 @@ export function HomeClient({ rooms }: HomeClientProps) {
                   <button
                     key={type}
                     onClick={() => setFilters((f) => ({ ...f, type: active ? '' : type }))}
+                    aria-pressed={active}
                     className={`rounded-full border px-4 py-2 text-xs font-semibold transition-all duration-150 active:scale-[0.97] ${
                       active
                         ? 'border-brand bg-brand text-brand-ink shadow-md shadow-brand/25'
@@ -489,6 +491,7 @@ export function HomeClient({ rooms }: HomeClientProps) {
                       <button
                         key={amenity}
                         onClick={() => toggleAmenity(amenity)}
+                        aria-pressed={active}
                         className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold transition-all duration-150 active:scale-[0.97] ${
                           active
                             ? 'border-gold bg-gold/15 text-gold shadow-sm'
